@@ -1,4 +1,24 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
+
+class InputLoader:
+    """Загружает интервью из JSON-файла."""
+
+    @staticmethod
+    def load_json(path: str | Path) -> InterviewInput:
+        """
+        Загружает JSON и возвращает объект InterviewInput.
+
+        Args:
+            path (str | Path): Путь к JSON-файлу.
+
+        Returns:
+            InterviewInput: Объект с данными интервью.
+
+        Raises:
+            FileNotFoundError: Если файл не существует.
+            KeyError: Если отсутствуют обязательные поля.
+        """
+
 """
 Prototype of a candidate screening system for audio interview analysis.
 
