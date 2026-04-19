@@ -2,3 +2,5 @@ __MACOSX/
 *.pyc
 __pycache__/
 .DS_Store
+examples/
+training/
