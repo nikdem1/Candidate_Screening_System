@@ -51,5 +51,5 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Done: dist\CandidateSS_Installer.exe
+echo Done: dist\Candidate_Screening_System_Installer.exe
 exit /b 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""CandidateSS desktop GUI."""
+"""Candidate Screening System desktop GUI."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from candidate_screening_system import (
     InterviewInput,
     NeuralEvaluator,
     RuleBasedEvaluator,
+    YandexLLMEvaluator,
     safe_write_json,
     safe_write_text,
 )
@@ -29,6 +30,7 @@ from external_media_loader import download_external_media, validate_external_sou
 
 DEFAULT_OUTPUT_DIR = "output"
 DEFAULT_DOWNLOADS_DIR = "incoming_media"
+APP_DATA_DIRNAME = "CandidateSS"
 
 
 @dataclass
@@ -50,7 +52,7 @@ class RunConfig:
 class CandidateSSApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("CandidateSS")
+        self.root.title("Candidate Screening System")
         self.root.geometry("1080x760")
         self.root.minsize(980, 680)
         self.root.configure(bg="#f4f7fb")
@@ -63,6 +65,21 @@ class CandidateSSApp:
         self._build_ui()
         self._install_edit_shortcuts()
         self.root.after(120, self._poll_events)
+
+    @staticmethod
+    def _app_writable_root() -> Path:
+        """Return a user-writable root folder for app data."""
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / APP_DATA_DIRNAME
+        return Path.home() / f".{APP_DATA_DIRNAME.lower()}"
+
+    def _resolve_user_dir(self, raw_value: str, default_leaf: str) -> Path:
+        value = (raw_value or "").strip() or default_leaf
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return candidate
+        return self._app_writable_root() / candidate
 
     def _build_style(self) -> None:
         style = ttk.Style(self.root)
@@ -93,18 +110,12 @@ class CandidateSSApp:
 
         header = ttk.Frame(main)
         header.pack(fill="x", pady=(0, 10))
-        ttk.Label(header, text="CandidateSS", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(header, text="Candidate Screening System", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             header,
             text="Загрузка интервью (файл/ссылка), транскрибация, оценка и готовый HR-отчет в одном окне.",
             style="Subtitle.TLabel",
         ).pack(anchor="w", pady=(2, 0))
-
-        ttk.Label(
-            main,
-            text="Подсказка: перетаскивайте разделители между блоками, чтобы изменить их размер.",
-            style="Subtitle.TLabel",
-        ).pack(anchor="w", pady=(0, 6))
 
         vertical_pane = ttk.Panedwindow(main, orient="vertical")
         vertical_pane.pack(fill="both", expand=True)
@@ -127,7 +138,8 @@ class CandidateSSApp:
             try:
                 total_h = vertical_pane.winfo_height()
                 if total_h > 200:
-                    vertical_pane.sashpos(0, int(total_h * 0.48))
+                    # Keep top controls and action buttons visible on first launch.
+                    vertical_pane.sashpos(0, int(total_h * 0.58))
                 total_w = bottom_container.winfo_width()
                 if total_w > 300:
                     bottom_container.sashpos(0, int(total_w * 0.50))
@@ -146,10 +158,8 @@ class CandidateSSApp:
 
         self.source_type = tk.StringVar(value="local")
         self.source_value = tk.StringVar()
-        self.candidate_id = tk.StringVar(value=f"candidate_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        self.candidate_id = tk.StringVar(value="candidate_001")
         self.vacancy_title = tk.StringVar(value="Менеджер по работе с клиентами")
-        self.position_level = tk.StringVar(value="junior")
-        self.language = tk.StringVar(value="ru")
         self.model_size = tk.StringVar(value="small")
         self.output_dir = tk.StringVar(value=DEFAULT_OUTPUT_DIR)
         self.downloads_dir = tk.StringVar(value=DEFAULT_DOWNLOADS_DIR)
@@ -169,13 +179,9 @@ class CandidateSSApp:
 
         ttk.Label(card, text="Candidate ID").grid(row=3, column=0, sticky="w", pady=3)
         ttk.Entry(card, textvariable=self.candidate_id).grid(row=3, column=1, sticky="ew", padx=6, pady=3)
-        ttk.Label(card, text="Уровень").grid(row=3, column=2, sticky="w", pady=3)
 
         ttk.Label(card, text="Вакансия").grid(row=4, column=0, sticky="w", pady=3)
-        ttk.Entry(card, textvariable=self.vacancy_title).grid(row=4, column=1, sticky="ew", padx=6, pady=3)
-        ttk.Combobox(card, textvariable=self.position_level, values=["junior", "middle", "senior"], state="readonly").grid(
-            row=4, column=2, sticky="ew", pady=3
-        )
+        ttk.Entry(card, textvariable=self.vacancy_title).grid(row=4, column=1, columnspan=2, sticky="ew", padx=6, pady=3)
 
         ttk.Label(card, text="Описание вакансии").grid(row=5, column=0, sticky="nw", pady=3)
         self.vacancy_desc_text = tk.Text(card, height=4, wrap="word", font=("Segoe UI", 10))
@@ -189,11 +195,6 @@ class CandidateSSApp:
         opts.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         for col in range(8):
             opts.columnconfigure(col, weight=1)
-
-        ttk.Label(opts, text="Язык").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(opts, textvariable=self.language, values=["ru", "en", "auto"], state="readonly").grid(
-            row=1, column=0, sticky="ew", padx=(0, 6)
-        )
         ttk.Label(opts, text="Whisper").grid(row=0, column=1, sticky="w")
         ttk.Combobox(
             opts,
@@ -203,7 +204,7 @@ class CandidateSSApp:
         ).grid(row=1, column=1, sticky="ew", padx=(0, 6))
 
         ttk.Label(opts, text="Оценщик").grid(row=0, column=2, sticky="w")
-        ttk.Combobox(opts, textvariable=self.engine, values=["rule", "neural"], state="readonly").grid(
+        ttk.Combobox(opts, textvariable=self.engine, values=["rule", "neural", "yandex"], state="readonly").grid(
             row=1, column=2, sticky="ew", padx=(0, 6)
         )
         ttk.Label(opts, text="Neural model path").grid(row=0, column=3, sticky="w")
@@ -317,12 +318,12 @@ class CandidateSSApp:
         return "break"
 
     def _open_output_folder(self) -> None:
-        folder = Path(self.output_dir.get().strip() or DEFAULT_OUTPUT_DIR)
+        folder = self._resolve_user_dir(self.output_dir.get(), DEFAULT_OUTPUT_DIR)
         folder.mkdir(parents=True, exist_ok=True)
         os.startfile(str(folder))
 
     def _open_downloads_folder(self) -> None:
-        folder = Path(self.downloads_dir.get().strip() or DEFAULT_DOWNLOADS_DIR)
+        folder = self._resolve_user_dir(self.downloads_dir.get(), DEFAULT_DOWNLOADS_DIR)
         folder.mkdir(parents=True, exist_ok=True)
         os.startfile(str(folder))
 
@@ -347,8 +348,8 @@ class CandidateSSApp:
             candidate_id=candidate_id,
             vacancy_title=self.vacancy_title.get().strip(),
             vacancy_description=vacancy_description,
-            position_level=self.position_level.get().strip() or "junior",
-            language=self.language.get().strip() or "ru",
+            position_level="junior",
+            language="ru",
             model_size=self.model_size.get().strip() or "small",
             output_dir=self.output_dir.get().strip() or DEFAULT_OUTPUT_DIR,
             downloads_dir=self.downloads_dir.get().strip() or DEFAULT_DOWNLOADS_DIR,
@@ -407,7 +408,7 @@ class CandidateSSApp:
             transcript = transcriber.transcribe_file(media_path, language=cfg.language)
             self._emit("detail_busy", False)
 
-            out_dir = Path(cfg.output_dir)
+            out_dir = self._resolve_user_dir(cfg.output_dir, DEFAULT_OUTPUT_DIR)
             out_dir.mkdir(parents=True, exist_ok=True)
             self._emit("log", f"Папка отчетов: {out_dir.resolve()}")
             interview_json_path = out_dir / f"{cfg.candidate_id}.json"
@@ -439,6 +440,8 @@ class CandidateSSApp:
             )
             if cfg.engine == "neural":
                 evaluator = NeuralEvaluator(model_path=cfg.neural_model_path)
+            elif cfg.engine == "yandex":
+                evaluator = YandexLLMEvaluator(fallback=RuleBasedEvaluator())
             else:
                 evaluator = RuleBasedEvaluator()
             system = CandidateScreeningSystem(evaluator=evaluator)
@@ -474,7 +477,7 @@ class CandidateSSApp:
                 raise RuntimeError("Источник не прошел валидацию и не может быть обработан.")
 
             self._emit("stage", ("Скачивание файла", 18))
-            downloads_dir = Path(cfg.downloads_dir)
+            downloads_dir = self._resolve_user_dir(cfg.downloads_dir, DEFAULT_DOWNLOADS_DIR)
             downloads_dir.mkdir(parents=True, exist_ok=True)
             self._emit("log", f"Папка загрузок: {downloads_dir.resolve()}")
 

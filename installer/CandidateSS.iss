@@ -1,6 +1,6 @@
 ﻿; CandidateSS installer for Windows (Inno Setup 6)
 
-#define MyAppName "CandidateSS"
+#define MyAppName "Candidate Screening System"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Candidate Screening System"
 #define MyAppExeName "CandidateSS.exe"
@@ -18,7 +18,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=CandidateSS_Installer
+OutputBaseFilename=Candidate_Screening_System_Installer
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -30,7 +30,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 #if AppBuildMode == "onedir"
-Source: "..\dist\candidate_ss_gui.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\candidate_ss_gui.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "training\interviews\*;training\asr_raw\*"
 #else
 Source: "..\dist\CandidateSS.exe"; DestDir: "{app}"; Flags: ignoreversion
 #endif
